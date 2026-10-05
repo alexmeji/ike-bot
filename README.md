@@ -1,126 +1,146 @@
-# aloha-support-bot · ʻIke
+# ike-bot · ʻIke
 
-**ʻIke** ("conocimiento, saber" en hawaiano) es el bot de soporte interno de Aloha. El equipo
-le escribe `@ike ...` en el chat y el bot enruta la pregunta al agente del producto (Pay, Axis) según el
-canal. Hoy: Discord. Después: Slack, con el mismo core.
+**ʻIke** ("conocimiento, saber" en hawaiano) es el bot de soporte interno de
+Aloha. El equipo le escribe `@ike ...` en el chat y el bot enruta la pregunta
+al agente del producto (Pay, Axis) según el canal. Hoy: Discord. Después:
+Slack, con el mismo core.
 
 ```
-Discord ──► adapters/discord.py ─┐
-Slack   ──► adapters/slack.py  ──┤  (futuro)
-                                 ▼
-                core/routes.py   "discord:<canal>" → producto + runtime + role
-                core/responders  echo | agentcore (AssumeRole → InvokeAgentRuntime)
+Discord ──WebSocket saliente──► ike-bot (ECS Fargate · internal-tools)
+                                   │ core/routes: "discord:<canal>" → producto
+                                   │ AssumeRole ike-bot-invoker
+                                   ▼
+                                AgentCore runtime del producto (pay, axis)
 ```
+
+Sin ALB, sin puertos de entrada, sin dominio.
 
 ## Estructura
 
 ```
-src/support_bot/
-├── __main__.py            python -m support_bot <discord|slack>
+src/ike_bot/
+├── __main__.py            python -m ike_bot <discord|slack>
 ├── core/
 │   ├── request.py         Request, Route, Responder
 │   ├── routes.py          carga rutas de SSM o archivo
 │   └── responders.py      EchoResponder, AgentCoreResponder
 └── adapters/
     └── discord.py         @menciones, hilos, permisos por rol
-deploy/
-├── deploy.sh              corre en la EC2 (vía SSM)
-├── user-data.sh           bootstrap de la EC2
-└── iam-policies.md        roles y policies
-.github/workflows/deploy.yml
-routes.example.json
+infra/
+├── README.md              instrucciones para crear la infraestructura
+├── bootstrap.sh           crea todo en internal-tools (idempotente)
+├── invoker-role.sh        role en la cuenta de cada producto
+├── task-definition.json   plantilla de la task (env, secretos, logs)
+└── policies/              policies IAM
+deploy.sh                  deploy manual: build → push → ECS
+assets/                    avatares del bot
 ```
 
-## 1. Crear el bot en Discord
+## 1. Bot en Discord
 
 1. https://discord.com/developers/applications → **New Application** → `ʻIke`.
-   En **Bot**, username `ike` (sin ʻokina, fácil de mencionar). Sube un avatar.
-2. **Bot** → *Reset Token* → cópialo a `.env` (`DISCORD_TOKEN`).
-3. **Bot → Privileged Gateway Intents** → activa **Message Content Intent**
-   (sin esto, los mensajes de seguimiento en el hilo llegan vacíos).
-4. **OAuth2 → URL Generator** → scope `bot`, permisos: View Channels,
+2. **Información general:** ícono `assets/ike-avatar.png`, descripción y
+   etiquetas. **URL de interacciones: vacía** (usamos el Gateway).
+3. **Bot:** username `ike`, *Reset Token* (guárdalo para el bootstrap),
+   **Public Bot: off**, **Message Content Intent: on**.
+4. **Instalación:** solo *Guild Install*.
+5. **OAuth2 → URL Generator** → scope `bot`, permisos: View Channels,
    Send Messages, Create Public Threads, Send Messages in Threads,
    Read Message History. Abre la URL e invítalo al servidor.
-5. Dale acceso solo a los canales de soporte.
+6. Dale acceso solo a los canales de soporte.
 
-## 2. Correr local (modo desarrollo)
+## 2. Correr local
 
 ```bash
 cp .env.example .env          # pega DISCORD_TOKEN
 uv sync
-uv run --env-file .env python -m support_bot discord
+uv run --env-file .env python -m ike_bot discord
+uv run pytest                  # tests
 ```
 
-Sin rutas configuradas responde en cualquier canal con `RESPONDER=echo`.
-En Discord: `@ike estado de verificación de Pepito` → abre hilo y responde.
+Sin rutas responde en cualquier canal (modo desarrollo). Para probar el
+ruteo: *Developer Mode* en Discord → click derecho al canal → *Copy ID*,
+crea `routes.json` desde `routes.example.json` y pon `ROUTES_FILE=routes.json`.
 
-Para probar el ruteo: activa *Developer Mode* en Discord (Ajustes → Avanzado),
-click derecho al canal → *Copy ID*, crea `routes.json` a partir de
-`routes.example.json` y pon `ROUTES_FILE=routes.json` en `.env`.
+> Apaga el bot de producción (`./deploy.sh --stop`) mientras pruebas en local
+> con el mismo token, o respondería dos veces.
 
-Tests:
+## 3. Infraestructura (una sola vez)
+
+Ver [`infra/README.md`](infra/README.md). Resumen:
 
 ```bash
-uv run pytest
+VPC_ID=vpc-xxx SUBNET_IDS=subnet-a,subnet-b DISCORD_CHANNEL_ID=<canal> ./infra/bootstrap.sh
 ```
 
-## 3. Rutas
+## 4. Deploy (manual)
 
-Cada clave es `<plataforma>:<channel_id>`. Un canal sin ruta = el bot no responde ahí.
+```bash
+./deploy.sh                 # tests → build ARM64 → push a ECR → actualiza el servicio
+./deploy.sh --tag <tag>     # rollback a una imagen anterior
+./deploy.sh --stop          # apagar el bot
+```
+
+El tag de la imagen es el SHA corto del commit (o `-dirty-<fecha>` si hay
+cambios sin commitear). Requiere aws cli v2 con credenciales de
+internal-tools y Docker con buildx.
+
+**Configuración** (env, `RESPONDER`, roles permitidos): se cambia en
+`infra/task-definition.json` y se aplica con `./deploy.sh`.
+**Rutas:** se cambian en SSM (`/ike-bot/routes`) y se aplican reiniciando:
+`./deploy.sh --tag <tag actual>`.
+
+## 5. Operación
+
+```bash
+aws logs tail /ike-bot --follow                                   # logs
+aws ecs describe-services --cluster ike-bot --services ike-bot-discord \
+  --query 'services[0].events[:5]'                                # eventos
+
+# Terminal dentro del contenedor (requiere session-manager-plugin)
+TASK=$(aws ecs list-tasks --cluster ike-bot --service-name ike-bot-discord --query 'taskArns[0]' --output text)
+aws ecs execute-command --cluster ike-bot --task "$TASK" --container ike-bot --interactive --command /bin/sh
+```
+
+| Síntoma | Causa probable |
+|---|---|
+| La task arranca y se detiene | Revisa `aws logs tail /ike-bot`; token inválido o falta el secreto |
+| Conectado pero los mensajes llegan vacíos | Falta **Message Content Intent** en Discord |
+| No responde en el canal | El ID en `/ike-bot/routes` no coincide (en hilos se usa el canal padre) |
+| Responde dos veces | Hay otra copia corriendo (¿local con el mismo token?) |
+
+## 6. Rutas
+
+Clave `<plataforma>:<channel_id>`. Canal sin ruta = el bot no responde ahí.
 
 ```json
 {
   "discord:1290000000000000001": {
     "product": "pay",
     "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:<PAY>:runtime/pay_support-XXXX",
-    "role_arn": "arn:aws:iam::<PAY>:role/support-bot-invoker"
+    "role_arn": "arn:aws:iam::<PAY>:role/ike-bot-invoker"
   }
 }
 ```
 
-En producción guárdalas en SSM (`ROUTES_SSM_PARAM=/aloha-support-bot/routes`):
-cambiar una ruta no requiere redeploy, solo reiniciar el contenedor.
-Si el agente vive en la misma cuenta que el bot, omite `role_arn`.
+## 7. Conectar un agente
 
-Agregar un producto = crear su role `support-bot-invoker` + una línea en rutas + el canal.
+1. En la cuenta del producto: `./infra/invoker-role.sh` (ver `infra/README.md`).
+2. Agrega la ruta con `runtime_arn` y `role_arn` en SSM.
+3. `RESPONDER=agentcore` en `infra/task-definition.json` → `./deploy.sh`.
 
-## 4. Conectar el agente
+Contrato con el agente:
 
-Cambia `RESPONDER=agentcore`. El contrato con el agente:
-
-- **Payload enviado:** `{"prompt": "...", "requested_by": "discord:<user_id>"}`
-- **Respuesta esperada:** `{"result": "<texto>"}`
+- **Payload:** `{"prompt": "...", "requested_by": "discord:<user_id>"}`
+- **Respuesta:** `{"result": "<texto>"}`
 - **Sesión:** `runtimeSessionId` = id del hilo → el agente conserva contexto.
 
-## 5. Infra (cuenta internal-tools)
+## 8. Agregar Slack (futuro)
 
-1. **ECR:** repo `aloha-support-bot`.
-2. **Secrets Manager:** `aloha-support-bot/env` con el contenido del `.env`
-   de producción (formato `KEY=valor`, una por línea).
-3. **SSM Parameter:** `/aloha-support-bot/routes` con el JSON de rutas.
-4. **EC2:** Amazon Linux 2023, `t4g.micro`, subnet pública con IP pública,
-   security group **sin reglas de entrada**, tag `App=aloha-support-bot`,
-   instance role de `deploy/iam-policies.md`, user data `deploy/user-data.sh`.
-   - **IMDSv2 obligatorio con hop limit = 2** (si es 1, el contenedor no
-     puede obtener las credenciales del instance role).
-   - Acceso por **SSM Session Manager**, sin SSH ni key pair.
-5. **GitHub:** OIDC provider + role de deploy (`deploy/iam-policies.md`) y
-   secret `AWS_DEPLOY_ROLE_ARN` en el repo.
-
-## 6. Deploy
-
-Push a `main` → build ARM → push a ECR → SSM ejecuta `deploy.sh` en la EC2.
-
-**Rollback:** Actions → *deploy* → *Run workflow* → `image_tag` = SHA anterior.
-
-## 7. Agregar Slack (futuro)
-
-1. `adapters/slack.py` con Slack Bolt en **Socket Mode** (sin endpoint público),
-   escuchando `app_mention` y respondiendo en `thread_ts`.
-   Debe construir `Request` con `route_key="slack:<channel>"`,
-   `session_id="slack-thread-<channel>-<thread_ts>"`, `requested_by="slack:<user>"`.
-2. Agregar `"slack"` en `ADAPTERS` (`__main__.py`) y en `PLATFORMS` (`deploy.sh`).
-3. Agregar `slack-bolt` a dependencias y `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` al secreto.
-4. Rutas `"slack:<channel_id>"`.
-
-Mismo core, misma imagen, un contenedor por plataforma.
+1. `adapters/slack.py` con Slack Bolt en **Socket Mode** (sin endpoint
+   público), escuchando `app_mention` y respondiendo en `thread_ts`, con
+   `route_key="slack:<channel>"`, `session_id="slack-thread-<channel>-<ts>"`,
+   `requested_by="slack:<user>"`.
+2. Agregar `"slack"` en `ADAPTERS` (`__main__.py`) y `slack-bolt` a dependencias.
+3. Tokens de Slack en el secreto `ike-bot/env`.
+4. Un segundo servicio `ike-bot-slack` (copia de la task con `command: ["slack"]`).

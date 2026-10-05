@@ -88,7 +88,7 @@ class DiscordAdapter(discord.Client):
 
         req = Request(
             prompt=prompt,
-            session_id=f"discord-thread-{thread.id}-aloha-support",  # AgentCore pide >= 33 chars
+            session_id=f"discord-thread-{thread.id}-ike-bot",  # AgentCore pide >= 33 chars
             requested_by=f"discord:{msg.author.id}",
             route_key=route_key,
             route=self.router.resolve(route_key),

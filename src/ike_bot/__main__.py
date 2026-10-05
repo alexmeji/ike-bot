@@ -1,7 +1,7 @@
-"""Arranque: python -m support_bot <plataforma>
+"""Arranque: python -m ike_bot <plataforma>
 
-    python -m support_bot discord
-    python -m support_bot slack      # futuro: agregar adapters/slack.py
+    python -m ike_bot discord
+    python -m ike_bot slack      # futuro: agregar adapters/slack.py
 """
 
 import logging

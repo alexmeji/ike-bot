@@ -1,0 +1,60 @@
+{
+  "family": "ike-bot-discord",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ike-bot-execution",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ike-bot-task",
+  "containerDefinitions": [
+    {
+      "name": "ike-bot",
+      "image": "<IMAGE>",
+      "essential": true,
+      "command": [
+        "discord"
+      ],
+      "linuxParameters": {
+        "initProcessEnabled": true
+      },
+      "environment": [
+        {
+          "name": "RESPONDER",
+          "value": "echo"
+        },
+        {
+          "name": "ROUTES_SSM_PARAM",
+          "value": "/ike-bot/routes"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "<REGION>"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DISCORD_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:ike-bot/env:DISCORD_TOKEN::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ike-bot",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "discord"
+        }
+      }
+    }
+  ]
+}

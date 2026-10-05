@@ -12,5 +12,5 @@ RUN useradd --create-home bot
 USER bot
 
 # La plataforma se pasa como argumento: docker run ... <imagen> discord
-ENTRYPOINT ["python", "-m", "support_bot"]
+ENTRYPOINT ["python", "-m", "ike_bot"]
 CMD ["discord"]

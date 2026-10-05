@@ -41,7 +41,7 @@ class AgentCoreResponder:
             return cached[0]
 
         creds = self._boto3.client("sts").assume_role(
-            RoleArn=role_arn, RoleSessionName="aloha-support-bot"
+            RoleArn=role_arn, RoleSessionName="ike-bot"
         )["Credentials"]
         client = self._boto3.client(
             "bedrock-agentcore",

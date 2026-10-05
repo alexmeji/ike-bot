@@ -3,10 +3,10 @@ import json
 
 import pytest
 
-from support_bot.adapters.discord import chunks
-from support_bot.core.request import Request
-from support_bot.core.responders import AgentCoreResponder, EchoResponder
-from support_bot.core.routes import Router
+from ike_bot.adapters.discord import chunks
+from ike_bot.core.request import Request
+from ike_bot.core.responders import AgentCoreResponder, EchoResponder
+from ike_bot.core.routes import Router
 
 ROUTES = {
     "discord:1": {"product": "pay", "runtime_arn": "arn:rt/pay", "role_arn": "arn:role/pay"},
@@ -15,7 +15,7 @@ ROUTES = {
 
 
 def _req(router, key="discord:1"):
-    return Request("estado de Pepito", "discord-thread-123-aloha-support",
+    return Request("estado de Pepito", "discord-thread-123-ike-bot",
                    "discord:42", key, router.resolve(key))
 
 

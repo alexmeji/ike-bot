@@ -2,11 +2,11 @@
   "discord:1290000000000000001": {
     "product": "pay",
     "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:111111111111:runtime/pay_support-XXXXXXXXXX",
-    "role_arn": "arn:aws:iam::111111111111:role/support-bot-invoker"
+    "role_arn": "arn:aws:iam::111111111111:role/ike-bot-invoker"
   },
   "discord:1290000000000000002": {
     "product": "axis",
     "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:222222222222:runtime/axis_support-XXXXXXXXXX",
-    "role_arn": "arn:aws:iam::222222222222:role/support-bot-invoker"
+    "role_arn": "arn:aws:iam::222222222222:role/ike-bot-invoker"
   }
 }
