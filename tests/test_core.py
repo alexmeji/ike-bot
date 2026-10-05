@@ -4,7 +4,7 @@ import json
 import pytest
 
 from ike_bot.adapters.discord import chunks
-from ike_bot.core.request import Request
+from ike_bot.core.request import Request, Route
 from ike_bot.core.responders import AgentCoreResponder, EchoResponder
 from ike_bot.core.routes import Router
 
@@ -52,3 +52,29 @@ def test_agentcore_sin_ruta_no_invoca():
 def test_chunks_respeta_limite_de_discord():
     parts = chunks("x" * 4500)
     assert len(parts) == 3 and all(len(p) <= 2000 for p in parts)
+
+
+def test_agentcore_manda_el_producto_de_la_ruta():
+    resp = AgentCoreResponder("us-east-1")
+    sent = {}
+
+    class FakeClient:
+        def invoke_agent_runtime(self, **kw):
+            sent.update(kw)
+
+            class Body:
+                def read(self):
+                    return json.dumps({"result": "ok"}).encode()
+
+            return {"response": Body()}
+
+    resp._client = lambda role_arn: FakeClient()
+    req = Request(
+        prompt="hola", session_id="discord-thread-1-ike-bot",
+        requested_by="discord:42", route_key="discord:1",
+        route=Route(product="pay", runtime_arn="arn:x", role_arn=None),
+    )
+    assert asyncio.run(resp.respond(req)) == "ok"
+    assert json.loads(sent["payload"]) == {
+        "prompt": "hola", "requested_by": "discord:42", "product": "pay",
+    }

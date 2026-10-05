@@ -59,7 +59,13 @@ class AgentCoreResponder:
             agentRuntimeArn=route.runtime_arn,
             runtimeSessionId=req.session_id,
             payload=json.dumps(
-                {"prompt": req.prompt, "requested_by": req.requested_by}
+                {
+                    "prompt": req.prompt,
+                    "requested_by": req.requested_by,
+                    # The agent behind one runtime can serve several products;
+                    # the channel's route is what says which one this is.
+                    "product": route.product,
+                }
             ).encode(),
         )
         body = resp["response"].read()

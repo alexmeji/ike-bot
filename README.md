@@ -117,8 +117,13 @@ Clave `<plataforma>:<channel_id>`. Canal sin ruta = el bot no responde ahí.
 {
   "discord:1290000000000000001": {
     "product": "pay",
-    "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:<PAY>:runtime/pay_support-XXXX",
-    "role_arn": "arn:aws:iam::<PAY>:role/ike-bot-invoker"
+    "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:495197194137:runtime/ike_sandbox-XXXXXXXXXX",
+    "role_arn": "arn:aws:iam::495197194137:role/ike-bot-invoker"
+  },
+  "discord:1290000000000000002": {
+    "product": "axis",
+    "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:495197194137:runtime/ike_sandbox-XXXXXXXXXX",
+    "role_arn": "arn:aws:iam::495197194137:role/ike-bot-invoker"
   }
 }
 ```
@@ -131,7 +136,8 @@ Clave `<plataforma>:<channel_id>`. Canal sin ruta = el bot no responde ahí.
 
 Contrato con el agente:
 
-- **Payload:** `{"prompt": "...", "requested_by": "discord:<user_id>"}`
+- **Payload:** `{"prompt": "...", "requested_by": "discord:<user_id>", "product": "<route.product>"}`
+  - `product` viene de la ruta del canal; el agente responde "no conozco ese producto" si no lo tiene.
 - **Respuesta:** `{"result": "<texto>"}`
 - **Sesión:** `runtimeSessionId` = id del hilo → el agente conserva contexto.
 
