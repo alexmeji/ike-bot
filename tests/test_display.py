@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from ike_bot.adapters.discord import chunks, embed_from_dict, embed_groups
+from ike_bot.adapters.discord import chunks, embed_from_dict, embed_groups, send_reply
 from ike_bot.core.request import Reply, Request, Route
 from ike_bot.core.responders import AgentCoreResponder
 
@@ -86,11 +86,86 @@ def test_embed_from_dict_tolera_campos_vacios():
     assert all(f.name and f.value for f in e.fields)
 
 
+def _emb(n=10):
+    return embed_from_dict({"title": "t", "description": "d" * n})
+
+
 def test_embed_groups_13_embeds_son_10_y_3():
-    groups = embed_groups(list(range(13)))
+    groups = embed_groups([_emb() for _ in range(13)])
     assert [len(g) for g in groups] == [10, 3]
     assert embed_groups([]) == []
 
 
 def test_chunks_sigue_igual():
     assert len(chunks("x" * 2001)) == 2
+
+
+def test_embed_groups_parte_por_total_de_6000():
+    big = embed_from_dict({"title": "t", "description": "d" * 4000})
+    groups = embed_groups([big, big, _emb()])
+    assert [len(g) for g in groups] == [1, 2]
+    assert all(sum(len(e) for e in g) <= 6000 for g in groups)
+
+
+def test_embed_groups_embed_enorme_va_solo():
+    big = embed_from_dict({"title": "t", "description": "d" * 4096, "footer": "f" * 2048})
+    assert [len(g) for g in embed_groups([_emb(), big, _emb()])] == [1, 1, 1]
+
+
+def test_descripcion_se_recorta_si_excede_6000_sin_campos():
+    e = embed_from_dict({"title": "t", "description": "d" * 4096, "footer": "f" * 2048})
+    assert len(e) <= 6000
+
+
+def test_campo_solo_espacios_usa_relleno():
+    e = embed_from_dict({"title": "t", "fields": [{"name": "  ", "value": " \n"}]})
+    assert e.fields[0].name.strip("\u200b") == "" and e.fields[0].name
+    assert e.fields[0].value
+
+
+class FakeThread:
+    def __init__(self, fail_embeds=False):
+        self.sent, self.fail_embeds = [], fail_embeds
+
+    async def send(self, content=None, embeds=None):
+        if embeds is not None and self.fail_embeds:
+            raise RuntimeError("400 Bad Request")
+        self.sent.append(("embeds", embeds) if embeds is not None else ("text", content))
+
+
+TABLE = {"title": "Pagos", "fields": [{"name": "a", "value": "b", "inline": False}]}
+
+
+def test_envio_texto_primero_y_luego_embeds():
+    t = FakeThread()
+    asyncio.run(send_reply(t, Reply(text="Resumen", embeds=(TABLE,))))
+    assert [k for k, _ in t.sent] == ["text", "embeds"]
+    assert t.sent[0][1] == "Resumen"
+
+
+def test_envio_solo_embeds_no_manda_texto():
+    t = FakeThread()
+    asyncio.run(send_reply(t, Reply(text="   ", embeds=(TABLE,))))
+    assert [k for k, _ in t.sent] == ["embeds"]
+
+
+def test_envio_sin_embeds_manda_texto():
+    t = FakeThread()
+    asyncio.run(send_reply(t, Reply(text="hola")))
+    assert t.sent == [("text", "hola")]
+
+
+def test_envio_omite_embeds_degenerados():
+    t = FakeThread()
+    asyncio.run(send_reply(t, Reply(text="x", embeds=({"footer": "solo pie"}, {}, TABLE))))
+    embeds = [v for k, v in t.sent if k == "embeds"]
+    assert len(embeds) == 1 and len(embeds[0]) == 1
+
+
+def test_envio_si_embeds_fallan_manda_texto_de_respaldo():
+    t = FakeThread(fail_embeds=True)
+    asyncio.run(send_reply(t, Reply(text="Resumen", embeds=(TABLE,))))
+    texts = [v for k, v in t.sent if k == "text"]
+    assert texts[0] == "Resumen"
+    assert "Pagos" in texts[1] and "a — b" in texts[1]
+    assert all(len(x) <= 2000 for x in texts)

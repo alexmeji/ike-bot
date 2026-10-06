@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 
 DISCORD_LIMIT = 2000
 EMBEDS_PER_MESSAGE = 10
+EMBED_TOTAL_LIMIT = 6000
 EMBED_COLOR = discord.Color.from_rgb(255, 107, 53)  # naranja Aloha
 _EMPTY = "\u200b"  # Discord rechaza nombres/valores vacíos
 
@@ -42,20 +43,71 @@ def embed_from_dict(d: dict) -> discord.Embed:
         if not isinstance(f, dict):
             continue
         embed.add_field(
-            name=_clip(f.get("name"), 256) or _EMPTY,
-            value=_clip(f.get("value"), 1024) or _EMPTY,
+            name=_clip(f.get("name"), 256).strip() or _EMPTY,
+            value=_clip(f.get("value"), 1024).strip() or _EMPTY,
             inline=bool(f.get("inline", False)),
         )
     if d.get("footer"):
         embed.set_footer(text=_clip(d["footer"], 2048))
     while len(embed) > 6000 and embed.fields:  # tope total por embed
         embed.remove_field(len(embed.fields) - 1)
+    excess = len(embed) - 6000  # sin campos y aún grande: recorta la descripción
+    if excess > 0 and embed.description:
+        embed.description = _clip(embed.description, max(1, len(embed.description) - excess))
     return embed
 
 
 def embed_groups(embeds: list, size: int = EMBEDS_PER_MESSAGE) -> list[list]:
-    """Discord admite hasta 10 embeds por mensaje."""
-    return [embeds[i : i + size] for i in range(0, len(embeds), size)]
+    """Agrupa por mensaje: ≤10 embeds y ≤6000 caracteres sumados (límite por mensaje)."""
+    groups: list[list] = []
+    total = 0
+    for e in embeds:
+        n = len(e)
+        if not groups or len(groups[-1]) >= size or total + n > EMBED_TOTAL_LIMIT:
+            groups.append([])
+            total = 0
+        groups[-1].append(e)
+        total += n
+    return groups
+
+
+def embeds_as_text(embeds) -> str:
+    """Respaldo en texto plano si Discord rechaza los embeds."""
+    lines: list[str] = []
+    for d in embeds:
+        if not isinstance(d, dict):
+            continue
+        if d.get("title"):
+            lines.append(f"**{d['title']}**")
+        if d.get("description"):
+            lines.append(str(d["description"]))
+        fields = d.get("fields")
+        for f in fields if isinstance(fields, list) else []:
+            if isinstance(f, dict):
+                lines.append(f"{f.get('name', '')} — {f.get('value', '')}")
+        if d.get("footer"):
+            lines.append(f"_{d['footer']}_")
+    return "\n".join(lines)
+
+
+async def send_reply(thread, reply: Reply) -> None:
+    """Texto primero, luego los embeds; si los embeds fallan, la tabla va como texto."""
+    if reply.text.strip() or not reply.embeds:
+        for part in chunks(reply.text):
+            await thread.send(part)
+    if not reply.embeds:
+        return
+    try:
+        built = [embed_from_dict(e) for e in reply.embeds if isinstance(e, dict)]
+        built = [e for e in built if e.title or e.description or e.fields]
+        for group in embed_groups(built):
+            await thread.send(embeds=group)
+    except Exception:
+        log.exception("No pude enviar los embeds; envío la tabla como texto")
+        fallback = embeds_as_text(reply.embeds)
+        if fallback.strip():
+            for part in chunks(fallback):
+                await thread.send(part)
 
 
 class DiscordAdapter(discord.Client):
@@ -138,12 +190,7 @@ class DiscordAdapter(discord.Client):
             log.exception("Error generando respuesta")
             reply = Reply(text="⚠️ Tuve un problema procesando la consulta. Intenta de nuevo.")
 
-        # Sin embeds: solo texto. Con embeds: el texto (si hay) y luego las tablas.
-        if reply.text or not reply.embeds:
-            for part in chunks(reply.text):
-                await thread.send(part)
-        for group in embed_groups([embed_from_dict(e) for e in reply.embeds]):
-            await thread.send(embeds=group)
+        await send_reply(thread, reply)
 
 
 def run(router: Router, responder: Responder) -> None:
