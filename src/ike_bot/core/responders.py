@@ -5,7 +5,7 @@ import json
 import logging
 import time
 
-from .request import Request, Responder
+from .request import Reply, Request, Responder
 
 log = logging.getLogger(__name__)
 
@@ -13,12 +13,14 @@ log = logging.getLogger(__name__)
 class EchoResponder:
     """Respuesta de prueba: valida la plataforma de chat de punta a punta."""
 
-    async def respond(self, req: Request) -> str:
+    async def respond(self, req: Request) -> Reply:
         product = req.route.product if req.route else "(modo desarrollo)"
-        return (
-            "🌺 ʻIke aquí. Recibí tu consulta, pero todavía no estoy conectado al agente.\n"
-            f"> {req.prompt}\n"
-            f"`producto: {product}` · `sesión: {req.session_id}`"
+        return Reply(
+            text=(
+                "🌺 ʻIke aquí. Recibí tu consulta, pero todavía no estoy conectado al agente.\n"
+                f"> {req.prompt}\n"
+                f"`producto: {product}` · `sesión: {req.session_id}`"
+            )
         )
 
 
@@ -53,7 +55,7 @@ class AgentCoreResponder:
         self._clients[role_arn] = (client, creds["Expiration"].timestamp())
         return client
 
-    def _invoke(self, req: Request) -> str:
+    def _invoke(self, req: Request) -> Reply:
         route = req.route
         resp = self._client(route.role_arn).invoke_agent_runtime(
             agentRuntimeArn=route.runtime_arn,
@@ -72,13 +74,22 @@ class AgentCoreResponder:
         try:
             data = json.loads(body)
         except json.JSONDecodeError:
-            return body.decode()
-        # Contrato con el agente: {"result": "<texto>"}
-        return data.get("result", str(data)) if isinstance(data, dict) else str(data)
+            return Reply(text=body.decode())
+        if not isinstance(data, dict):
+            return Reply(text=str(data))
+        # Contrato con el agente: {"result": "<texto>", "display"?: {"text", "embeds"}}.
+        # Con `display` se muestra eso y NO `result` (que repite la tabla como texto).
+        display = data.get("display")
+        if isinstance(display, dict) and isinstance(display.get("embeds"), list):
+            return Reply(
+                text=display.get("text") or "",
+                embeds=tuple(e for e in display["embeds"] if isinstance(e, dict)),
+            )
+        return Reply(text=data.get("result", str(data)))
 
-    async def respond(self, req: Request) -> str:
+    async def respond(self, req: Request) -> Reply:
         if req.route is None or not req.route.runtime_arn:
-            return "Este canal no está conectado a ningún agente."
+            return Reply(text="Este canal no está conectado a ningún agente.")
         log.info("invoke product=%s by=%s", req.route.product, req.requested_by)
         return await asyncio.to_thread(self._invoke, req)
 

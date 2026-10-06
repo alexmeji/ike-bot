@@ -40,13 +40,13 @@ def test_router_vacio_es_modo_desarrollo():
 def test_echo_muestra_producto():
     r = Router.from_json(json.dumps(ROUTES))
     out = asyncio.run(EchoResponder().respond(_req(r)))
-    assert "pay" in out and "estado de Pepito" in out
+    assert "pay" in out.text and "estado de Pepito" in out.text
 
 
 def test_agentcore_sin_ruta_no_invoca():
     resp = AgentCoreResponder("us-east-1")
     out = asyncio.run(resp.respond(_req(Router({}), "discord:9")))
-    assert "no está conectado" in out
+    assert "no está conectado" in out.text
 
 
 def test_chunks_respeta_limite_de_discord():
@@ -74,7 +74,7 @@ def test_agentcore_manda_el_producto_de_la_ruta():
         requested_by="discord:42", route_key="discord:1",
         route=Route(product="pay", runtime_arn="arn:x", role_arn=None),
     )
-    assert asyncio.run(resp.respond(req)) == "ok"
+    assert asyncio.run(resp.respond(req)).text == "ok"
     assert json.loads(sent["payload"]) == {
         "prompt": "hola", "requested_by": "discord:42", "product": "pay",
     }

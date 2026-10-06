@@ -5,12 +5,15 @@ import os
 
 import discord
 
-from ..core.request import Request, Responder
+from ..core.request import Reply, Request, Responder
 from ..core.routes import Router
 
 log = logging.getLogger(__name__)
 
 DISCORD_LIMIT = 2000
+EMBEDS_PER_MESSAGE = 10
+EMBED_COLOR = discord.Color.from_rgb(255, 107, 53)  # naranja Aloha
+_EMPTY = "\u200b"  # Discord rechaza nombres/valores vacíos
 
 
 def _ids(name: str) -> frozenset[int]:
@@ -20,6 +23,39 @@ def _ids(name: str) -> frozenset[int]:
 
 def chunks(text: str, size: int = DISCORD_LIMIT) -> list[str]:
     return [text[i : i + size] for i in range(0, len(text), size)] or ["(sin respuesta)"]
+
+
+def _clip(value, limit: int) -> str:
+    text = str(value if value is not None else "")
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def embed_from_dict(d: dict) -> discord.Embed:
+    """Dict neutral del agente -> discord.Embed, recortado a los límites de Discord."""
+    embed = discord.Embed(
+        title=_clip(d.get("title"), 256) or None,
+        description=_clip(d.get("description"), 4096) or None,
+        color=EMBED_COLOR,
+    )
+    fields = d.get("fields")
+    for f in (fields if isinstance(fields, list) else [])[:25]:
+        if not isinstance(f, dict):
+            continue
+        embed.add_field(
+            name=_clip(f.get("name"), 256) or _EMPTY,
+            value=_clip(f.get("value"), 1024) or _EMPTY,
+            inline=bool(f.get("inline", False)),
+        )
+    if d.get("footer"):
+        embed.set_footer(text=_clip(d["footer"], 2048))
+    while len(embed) > 6000 and embed.fields:  # tope total por embed
+        embed.remove_field(len(embed.fields) - 1)
+    return embed
+
+
+def embed_groups(embeds: list, size: int = EMBEDS_PER_MESSAGE) -> list[list]:
+    """Discord admite hasta 10 embeds por mensaje."""
+    return [embeds[i : i + size] for i in range(0, len(embeds), size)]
 
 
 class DiscordAdapter(discord.Client):
@@ -97,13 +133,17 @@ class DiscordAdapter(discord.Client):
 
         try:
             async with thread.typing():
-                answer = await self.responder.respond(req)
+                reply = await self.responder.respond(req)
         except Exception:
             log.exception("Error generando respuesta")
-            answer = "⚠️ Tuve un problema procesando la consulta. Intenta de nuevo."
+            reply = Reply(text="⚠️ Tuve un problema procesando la consulta. Intenta de nuevo.")
 
-        for part in chunks(answer):
-            await thread.send(part)
+        # Sin embeds: solo texto. Con embeds: el texto (si hay) y luego las tablas.
+        if reply.text or not reply.embeds:
+            for part in chunks(reply.text):
+                await thread.send(part)
+        for group in embed_groups([embed_from_dict(e) for e in reply.embeds]):
+            await thread.send(embeds=group)
 
 
 def run(router: Router, responder: Responder) -> None:

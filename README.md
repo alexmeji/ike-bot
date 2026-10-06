@@ -21,7 +21,7 @@ Sin ALB, sin puertos de entrada, sin dominio.
 src/ike_bot/
 ├── __main__.py            python -m ike_bot <discord|slack>
 ├── core/
-│   ├── request.py         Request, Route, Responder
+│   ├── request.py         Request, Route, Reply, Responder
 │   ├── routes.py          carga rutas de SSM o archivo
 │   └── responders.py      EchoResponder, AgentCoreResponder
 └── adapters/
@@ -138,7 +138,12 @@ Contrato con el agente:
 
 - **Payload:** `{"prompt": "...", "requested_by": "discord:<user_id>", "product": "<route.product>"}`
   - `product` viene de la ruta del canal; el agente responde "no conozco ese producto" si no lo tiene.
-- **Respuesta:** `{"result": "<texto>"}`
+- **Respuesta:** `{"result": "<texto>", "display"?: {"text": "<texto>", "embeds": [Embed]}}`
+  - `Embed` = `{"title", "description"?, "fields": [{"name", "value", "inline"}], "footer"?}`.
+  - Sin `display`: se envía `result` (en trozos de ≤2000 caracteres).
+  - Con `display`: se envía `display.text` y luego los embeds (≤10 por mensaje); `result` no se envía
+    (repite la tabla como texto). El bot recorta a los límites de Discord si el agente se pasa.
+  - El core solo ve dicts neutrales; el adaptador los dibuja (Discord embeds hoy, Block Kit en Slack).
 - **Sesión:** `runtimeSessionId` = id del hilo → el agente conserva contexto.
 
 ## 8. Agregar Slack (futuro)

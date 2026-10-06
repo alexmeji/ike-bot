@@ -20,5 +20,15 @@ class Request:
     route: Route | None  # None solo en modo desarrollo (sin rutas configuradas)
 
 
+@dataclass(frozen=True)
+class Reply:
+    """Lo que el agente responde. `embeds` son dicts neutrales a la plataforma
+    ({"title", "description"?, "fields": [{"name", "value", "inline"}], "footer"?});
+    cada adaptador los dibuja a su manera (Discord embeds, Slack Block Kit)."""
+
+    text: str
+    embeds: tuple[dict, ...] = ()
+
+
 class Responder(Protocol):
-    async def respond(self, req: Request) -> str: ...
+    async def respond(self, req: Request) -> Reply: ...
