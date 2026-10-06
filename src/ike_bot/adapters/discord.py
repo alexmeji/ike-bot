@@ -83,7 +83,7 @@ class DiscordAdapter(discord.Client):
             return
 
         thread = msg.channel if in_thread else await msg.create_thread(
-            name=prompt[:90], auto_archive_duration=1440
+            name=prompt[:90], auto_archive_duration=60
         )
 
         req = Request(
