@@ -94,12 +94,12 @@ internal-tools y Docker con buildx.
 
 ```bash
 aws logs tail /ike-bot --follow                                   # logs
-aws ecs describe-services --cluster ike-bot --services ike-bot-discord \
+aws ecs describe-services --cluster internal-tools --services ike-bot-discord \
   --query 'services[0].events[:5]'                                # eventos
 
 # Terminal dentro del contenedor (requiere session-manager-plugin)
-TASK=$(aws ecs list-tasks --cluster ike-bot --service-name ike-bot-discord --query 'taskArns[0]' --output text)
-aws ecs execute-command --cluster ike-bot --task "$TASK" --container ike-bot --interactive --command /bin/sh
+TASK=$(aws ecs list-tasks --cluster internal-tools --service-name ike-bot-discord --query 'taskArns[0]' --output text)
+aws ecs execute-command --cluster internal-tools --task "$TASK" --container ike-bot --interactive --command /bin/sh
 ```
 
 | Síntoma | Causa probable |

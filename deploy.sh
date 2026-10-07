@@ -13,7 +13,7 @@ set -euo pipefail
 
 : "${AWS_REGION:=us-east-1}"
 export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" AWS_PAGER=""
-CLUSTER=ike-bot
+CLUSTER=internal-tools
 SERVICE=ike-bot-discord
 REPO=ike-bot
 
