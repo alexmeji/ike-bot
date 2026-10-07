@@ -17,6 +17,8 @@ Objetivo: dejar corriendo **ike-bot** (bot de Discord de soporte interno) en
 | ECS cluster | `ike-bot` | Fargate |
 | ECS service | `ike-bot-discord` | 1 task ARM64, 0.25 vCPU / 0.5 GB, IP pública, **sin ALB** |
 
+> 2026-10-06: el servicio se mudó al cluster `internal-tools` (gestionado por aloha-infra `projects/internal/ike-bot`).
+
 No hay ALB, NAT, dominio ni puertos de entrada: el bot solo abre una conexión
 WebSocket **saliente** a Discord. La IP pública es para salir a internet.
 
@@ -53,7 +55,7 @@ correr dos copias del bot (cada mensaje se respondería dos veces).
 5. **Verificar:**
 
    ```bash
-   aws ecs describe-services --cluster ike-bot --services ike-bot-discord \
+   aws ecs describe-services --cluster internal-tools --services ike-bot-discord \
      --query 'services[0].[status,runningCount,desiredCount]'
    aws logs tail /ike-bot --since 10m     # debe decir "Discord conectado como ..."
    ```
