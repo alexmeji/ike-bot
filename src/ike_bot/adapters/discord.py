@@ -180,6 +180,8 @@ class DiscordAdapter(discord.Client):
             requested_by=f"discord:{msg.author.id}",
             route_key=route_key,
             route=self.router.resolve(route_key),
+            # Apodo del servidor, si no nombre global, si no usuario.
+            requested_by_name=(getattr(msg.author, "display_name", None) or "").strip() or None,
         )
         log.info("consulta by=%s route=%s thread=%s", req.requested_by, route_key, thread.id)
 

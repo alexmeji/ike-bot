@@ -18,6 +18,8 @@ class Request:
     requested_by: str    # "discord:<user_id>" / "slack:<user_id>", para auditoría
     route_key: str       # "discord:<channel_id>" / "slack:<channel_id>"
     route: Route | None  # None solo en modo desarrollo (sin rutas configuradas)
+    # Nombre visible de quien pregunta; solo para la columna "quién" de la consola.
+    requested_by_name: str | None = None
 
 
 @dataclass(frozen=True)

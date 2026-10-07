@@ -57,18 +57,21 @@ class AgentCoreResponder:
 
     def _invoke(self, req: Request) -> Reply:
         route = req.route
+        payload = {
+            "prompt": req.prompt,
+            "requested_by": req.requested_by,
+            # The agent behind one runtime can serve several products;
+            # the channel's route is what says which one this is.
+            "product": route.product,
+        }
+        # Opcional: solo se envía si hay un nombre no vacío (nunca null).
+        name = (req.requested_by_name or "").strip()
+        if name:
+            payload["requested_by_name"] = name
         resp = self._client(route.role_arn).invoke_agent_runtime(
             agentRuntimeArn=route.runtime_arn,
             runtimeSessionId=req.session_id,
-            payload=json.dumps(
-                {
-                    "prompt": req.prompt,
-                    "requested_by": req.requested_by,
-                    # The agent behind one runtime can serve several products;
-                    # the channel's route is what says which one this is.
-                    "product": route.product,
-                }
-            ).encode(),
+            payload=json.dumps(payload).encode(),
         )
         body = resp["response"].read()
         try:

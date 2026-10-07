@@ -136,7 +136,10 @@ Clave `<plataforma>:<channel_id>`. Canal sin ruta = el bot no responde ahí.
 
 Contrato con el agente:
 
-- **Payload:** `{"prompt": "...", "requested_by": "discord:<user_id>", "product": "<route.product>"}`
+- **Payload:** `{"prompt": "...", "requested_by": "discord:<user_id>", "product": "<route.product>", "requested_by_name": "<display name>"}`.
+  `requested_by_name` es opcional (solo se envía si hay nombre): el nombre visible de Discord
+  de quien pregunta, solo para la columna "quién" de la consola; `requested_by` sigue siendo
+  la identidad auditada.
   - `product` viene de la ruta del canal; el agente responde "no conozco ese producto" si no lo tiene.
 - **Respuesta:** `{"result": "<texto>", "display"?: {"text": "<texto>", "embeds": [Embed]}}`
   - `Embed` = `{"title", "description"?, "fields": [{"name", "value", "inline"}], "footer"?}`.
